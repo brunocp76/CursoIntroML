@@ -15,7 +15,12 @@ dados <- tribble(
     Diabetes = as.factor(Diabetes)
   )
 
-diabetes_tree_model <- decision_tree(min_n = 1, cost_complexity = -1) %>% set_mode("classification")
+diabetes_tree_model <- decision_tree(
+  min_n = 1,
+  cost_complexity = -1
+  ) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
 
 credit_tree_fit <- fit(
   diabetes_tree_model,
@@ -23,6 +28,6 @@ credit_tree_fit <- fit(
   data = dados
 )
 
-rpart.plot(credit_tree_fit$fit, roundint=FALSE)
+rpart.plot(credit_tree_fit$fit, roundint = FALSE)
 cp <- as.data.frame(credit_tree_fit$fit$cptable)
 cp
