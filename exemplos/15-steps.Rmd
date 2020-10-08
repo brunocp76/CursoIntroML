@@ -1,9 +1,3 @@
----
-title: "Recipes e seus steps"
-date: "14/09/2020"
-output: html_document
----
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -45,7 +39,7 @@ rec <- recipe(price ~ ., data = diamonds_com_problemas_a_mais)
 ## colocando steps e preparando --------------------------------------------
 
 ```{r}
-rec <- rec %>% step_zv(all_predictors())
+rec <- rec %>% step_zv(all_predictors()) %>% step_nzv(all_predictors())
 rec
 prep(rec)
 ```
@@ -54,7 +48,8 @@ prep(rec)
 
 ```{r}
 bake(prep(rec), diamonds)
-bake(prep(rec), diamonds %>% mutate(coluna_extra = 1))
+bake(prep(rec), diamonds %>% mutate(coluna_constante = 1))
+# Queremos evitar o "data leakage" (vazamento de informação) entre base de treino e base de teste...
 ```
 
 ## seletores de varaiveis --------------------------------------------------
@@ -79,9 +74,11 @@ x; y; price
 # step_dummy() ------------------------------------------------------------
 
 ```{r}
-rec2 <- rec %>% step_dummy(all_nominal())
+rec2 <- rec %>% step_dummy(all_nominal())  # "Engines" que precisam de dummificação:
+# glmnet, xgboost, ranger
 
-juice(prep(rec2)) %>% glimpse()
+juice(prep(rec2)) %>% glimpse()  # Equivalente a escrever...
+bake(prep(rec2), new_data = NULL) %>% glimpse()
 ```
 
 ## step_novel --------------------------------------------------------------
@@ -153,7 +150,7 @@ a <- prep(rec3)
 step_medianimpute() 
 step_meanimpute()
 step_lowerimpute()
-step_bagimpute(x)
+step_bagimpute()
 step_knnimpute()
 step_rollimpute()
 ```
@@ -224,6 +221,26 @@ step_hyperbolic()
 step_logit()
 step_invlogit()
 step_relu()
+
+diamonds %>% 
+  sample_n(1000) %>%
+  filter(!is.na(x), x > 0, !is.na(price), price > 0) %>% 
+  mutate(
+    pred_lm = predict(lm(price ~ x, data = .))
+  ) %>% 
+  ggplot(aes(x = x)) +
+  geom_point(aes(y = price)) +
+    geom_line(aes( y = pred_lm, color = "red"), size = 1L)
+  # + scale_y_log10()
+
+# sobre modelos lineares ----->
+# sobre problemas numericos
+
+# simetrização
+# imputação
+# normalização
+# dummyficação
+
 ```
 
 ## steps de transformacao de 1 para N colunas ------------------------------
@@ -236,6 +253,7 @@ step_ns() # natural splines GAM
 
 ```{r}
 rec3 <- rec %>% step_poly(x, degree = 5)
+rec3 <- rec %>% step_poly(x, degree = tune())  # novidade...
 juice(prep(rec3)) %>% glimpse()
 juice(prep(rec3)) %>% select(where(is.numeric)) %>% cor %>% corrplot::corrplot()
 ```
@@ -253,14 +271,14 @@ juice(prep(rec3)) %>% glimpse()
 ## steps de transformacao de N para N colunas ------------------------------
 
 ```{r}
-step_pca()
+step_pca(threshold = 0.9)  # Gera componentes principais até X% da variância...
 step_ica()
 step_isomap()
 step_umap()
 step_kpca()
 step_kpca_poly()
 step_kpca_rbf()
-step_interact() # modelos lineares
+step_interact() # modelos lineares, para criar interações...
 ```
 
 Cuidado com o outcome!
@@ -274,7 +292,7 @@ juice(prep(rec3)) %>% glimpse()
 ```{r}
 # com o -all_outcomes()
 rec3 <- rec %>% 
-  step_pca(all_numeric(), -all_outcomes(), threshold = 0.9) 
+  step_pca(all_numeric(), -all_outcomes(), threshold = 0.999) 
 juice(prep(rec3)) %>% glimpse()
 ```
 
@@ -445,4 +463,3 @@ step_tokenmerge()
 step_untokenize()
 step_word_embeddings()
 ```
-

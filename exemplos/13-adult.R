@@ -10,9 +10,10 @@ library(skimr)
 library(naniar)
 
 # PASSO 0) CARREGAR AS BASES -----------------------------------------------
-adult <- read_rds("curso-r-introduo-ao-machine-learning-com-r/adult.rds")
+httr::GET("https://github.com/curso-r/main-intro-ml/raw/master/dados/adult.rds", httr::write_disk("adult.rds", overwrite = TRUE))
+adult <- read_rds("adult.rds")
 help(adult)
-glimpse(adult) # German Risk 
+glimpse(adult) # German Risk
 
 adult %>% count(resposta)
 
@@ -20,25 +21,17 @@ adult %>% count(resposta)
 set.seed(1)
 adult_initial_split <- initial_split(adult, strata = "resposta", p = 0.75)
 
-data_adult_treino <- training(adult_initial_split)
+adult_train <- training(adult_initial_split)
 adult_test  <- testing(adult_initial_split)
 
 # PASSO 2) EXPLORAR A BASE -------------------------------------------------
-adult_recipe <- recipe(
-  resposta ~., data = data_adult_treino
-) %>% 
-  step_rm(id, skip = TRUE) %>%
-  step_zv(all_numeric()) %>%
-  step_medianimpute(all_numeric()) %>%
-  step_dummy(native_country, -resposta)  %>%
-  step_modeimpute(native_country, -resposta)
 
 prep(adult_recipe)
 glimpse(juice(prep(adult_recipe)))
 # vis_miss(adult)
 # skim(adult)
 # GGally::ggpairs(adult_train %>% select(where(is.numeric)) %>% mutate_all(log))
-# adult %>% 
+# adult %>%
 #   filter(Assets > 100) %>%
 #   select(where(is.numeric), resposta, Records) %>%
 #   pivot_longer(where(is.numeric)) %>%
@@ -46,7 +39,7 @@ glimpse(juice(prep(adult_recipe)))
 #   geom_boxplot() +
 #   facet_wrap(~name, scales = "free_y") +
 #   scale_y_log10()
-# 
+#
 # GGally::ggpairs(adult %>% select(where(~!is.numeric(.))))
 
 # PASSO 3) DATAPREP --------------------------------------------------------
@@ -60,8 +53,8 @@ adult_receita <- recipe(resposta ~ ., data = adult_train) %>%
 # juice(prep(adult_receita))
 
 # PASSO 4) MODELO ----------------------------------------------------------
-# Definição de 
-# a) a f(x): logistc_reg() 
+# Definição de
+# a) a f(x): logistc_reg()
 # b) modo (natureza da var resp): classification/regression
 # c) hiperparametros para tunar: penalty = tune()
 # d) hiperparametros para não tunar: mixture = 1 # LASSO
@@ -141,7 +134,10 @@ adult_test_preds %>%
 adult_modelo_final <- adult_wf %>% fit(adult)
 
 # PASSO 8: ESCORA BASE DE VALIDACAO ------------------------------------------------
-adult_val <- read_rds("curso-r-introduo-ao-machine-learning-com-r/adult_val.rds")
+# PASSO 0) CARREGAR AS BASES -----------------------------------------------
+httr::GET("https://github.com/curso-r/main-intro-ml/raw/master/dados/adult_val.rds", httr::write_disk("adult_val.rds", overwrite = TRUE))
+adult_val <- read_rds("adult_val.rds")
+
 
 adult_val_sumbissao <- adult_val %>%
   mutate(
@@ -217,7 +213,7 @@ comparacao_de_modelos <- collect_predictions(adult_lr_last_fit) %>%
     rec = recall_vec(resposta, .pred_class),
     ks = ks_vec(resposta, `.pred_<=50K`),
     roc = list(roc(resposta, `.pred_<=50K`))
-  ) 
+  )
 
 # KS no ggplot2 -------
 densidade_acumulada <- adult_test_preds %>%
@@ -253,7 +249,7 @@ ks_na_raca_df <- collect_predictions(adult_lr_last_fit) %>%
 ks_na_raca_df %>%
   ggplot(aes(x = pred_prob_mean, y = ecdf, linetype = resposta, colour = modelo)) +
   geom_line(size = 1) +
-  theme_minimal() 
+  theme_minimal()
 
 # descobrindo onde acontece o máximo ------------
 ks_na_raca_onde <- ks_na_raca_df %>%
@@ -276,7 +272,7 @@ ks_na_raca_df %>%
   ggplot(aes(x = pred_prob_mean, y = ecdf, colour = modelo)) +
   geom_line(size = 1, aes(linetype = resposta)) +
   geom_segment(data = ks_na_raca_onde, aes(x = pred_prob_mean_onde, xend = pred_prob_mean_onde, y = y_max, yend = y_min), size = 2, arrow = arrow(ends = "both")) +
-  theme_minimal() 
+  theme_minimal()
 
 
 

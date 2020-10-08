@@ -10,8 +10,6 @@ library(vip)
 # PASSO 0) CARREGAR AS BASES -----------------------------------------------
 data("credit_data")
 help(credit_data)
-credit_data %>% glimpse()
-credit_data %>% na.omit() %>% glimpse()
 credit_data <- credit_data %>% na.omit()
 glimpse(credit_data) # German Risk
 
@@ -24,12 +22,6 @@ credit_initial_split <- initial_split(credit_data, strata = "Status", p = 0.75)
 credit_train <- training(credit_initial_split)
 credit_test  <- testing(credit_initial_split)
 
-credit_train %>% count(Status)
-
-credit_train %>% count(Status) %>% janitor::adorn_totals("row")
-
-credit_train %>% count(Status) %>% janitor::adorn_totals("row") %>% janitor::adorn_percentages("col")
-
 # PASSO 2) EXPLORAR A BASE -------------------------------------------------
 
 ## veremos mais pra frente!
@@ -41,25 +33,22 @@ skimr::skim(credit_train)
 ## veremos mais pra frente!
 
 credit_recipe <- recipe(Status ~ ., data = credit_train) %>%
-  step_normalize(all_numeric()) %>%  # (x - mean(x)) / sd(x)
-  step_dummy(all_nominal(), -all_outcomes()) %>%  # dumifica (o "engine" pede isso...)
-  step_zv(all_predictors())  # elimina as colunas de "zero variance"...
+  step_normalize(all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  step_zv(all_predictors()) 
 
-credit_recipe_preparada <- prep(credit_recipe)
-
-# juice(credit_recipe_preparada)  # para quando a função não estava atualizada...
-bake(credit_recipe_preparada, new_data = NULL) %>% skimr::skim()
+bake(prep(credit_recipe), new_data = NULL)
 
 # PASSO 4) MODELO ----------------------------------------------------------
-# Definição de
-# a) a f(x): logistc_reg(), decision_tree()
+# Definição de 
+# a) a f(x): logistc_reg()
 # b) modo (natureza da var resp): classification
 # c) hiperparametros que queremos tunar: penalty = tune()
 # d) hiperparametros que não queremos tunar: mixture = 1 # LASSO
 # e) o motor que queremos usar: glmnet
 credit_lr_model <- logistic_reg(penalty = tune(), mixture = 1) %>%
   set_mode("classification") %>%
-  set_engine("glmnet")  # a função lm do R não possui a funcionalidade de normalização...
+  set_engine("glmnet")
 
 credit_wf <- workflow() %>% add_model(credit_lr_model) %>% add_recipe(credit_recipe)
 
@@ -74,14 +63,13 @@ credit_resamples <- vfold_cv(credit_train, v = 5)
 credit_lr_tune_grid <- tune_grid(
   credit_wf,
   resamples = credit_resamples,
-  # grid = 10,  # Ele sabe automatizar esse parâmetro de busca
   metrics = metric_set(
-    accuracy,
-    kap, # KAPPA
-    roc_auc,
-    precision,
-    recall,
-    f_meas,
+    accuracy, 
+    kap, # KAPPA 
+    roc_auc, 
+    precision, 
+    recall, 
+    f_meas, 
     mn_log_loss #binary cross entropy
   )
 )
@@ -103,16 +91,9 @@ collect_metrics(credit_lr_tune_grid) %>%
 credit_lr_best_params <- select_best(credit_lr_tune_grid, "roc_auc")
 credit_lr_model <- credit_lr_model %>% finalize_model(credit_lr_best_params)
 
-credit_wf <- credit_wf %>% finalize_workflow(credit_lr_best_params)
-
-# credit_lr_last_fit <- last_fit(
-#   credit_lr_model,
-#   Status ~ .,
-#   credit_initial_split
-# )
-
 credit_lr_last_fit <- last_fit(
-  credit_wf,
+  credit_lr_model,
+  Status ~ .,
   credit_initial_split
 )
 
@@ -121,14 +102,12 @@ credit_lr_last_fit_model <- credit_lr_last_fit$.workflow[[1]]$fit$fit
 vip(credit_lr_last_fit_model)
 
 # PASSO 7) GUARDA TUDO ---------------------------------------------------------
-write_rds(credit_lr_last_fit_model, "credit_lr_last_fit_model.rds", compress = "xz")
-write_rds(credit_lr_last_fit, "credit_lr_last_fit.rds", compress = "xz")
-write_rds(credit_lr_model, "credit_lr_model.rds", compress = "xz")
+write_rds(credit_lr_last_fit, "credit_lr_last_fit.rds")
+write_rds(credit_lr_model, "credit_lr_model.rds")
 
 collect_metrics(credit_lr_last_fit)
 
-# credit_test_preds <- credit_lr_last_fit$.predictions[[1]]
-credit_test_preds <- collect_predictions(credit_lr_last_fit)
+credit_test_preds <- credit_lr_last_fit$.predictions[[1]]
 
 # roc
 credit_roc_curve <- credit_test_preds %>% roc_curve(Status, .pred_bad)
@@ -144,7 +123,7 @@ credit_test_preds %>%
 # gráficos extras!
 
 # risco por faixa de score
-risco <- credit_test_preds %>%
+credit_test_preds %>%
   mutate(
     score =  factor(ntile(.pred_bad, 10))
   ) %>%
@@ -154,29 +133,11 @@ risco <- credit_test_preds %>%
   geom_label(aes(label = n), position = "fill") +
   coord_flip()
 
-hist <- credit_test_preds %>%
-  mutate(
-    corte = .pred_good > quantile(.pred_good, 0.1)
-  ) %>%
-  ggplot(aes(x = .pred_good)) +
-  geom_histogram(aes(fill = corte), color = "white")
-
-hist2 <- credit_test_preds %>%
-  mutate(
-    corte = .pred_good %>% between(quantile(.pred_good, 0.1), quantile(.pred_good, 0.7))
-  ) %>%
-  ggplot(aes(x = .pred_good)) +
-  geom_histogram(aes(fill = corte), color = "white")
-
-library(patchwork)
-risco / hist
-
 # gráfico sobre os da classe "bad"
 percentis = 20
 credit_test_preds %>%
   mutate(
-    score = factor(ntile(.pred_bad, percentis)),
-    # score = factor(ntile(runif(n()), percentis)),  # caso fosse seleção aleatória...
+    score = factor(ntile(.pred_bad, percentis))
   ) %>%
   filter(Status == "bad") %>%
   group_by(score) %>%
@@ -192,4 +153,6 @@ credit_test_preds %>%
 
 # PASSO 7) MODELO FINAL -----------------------------------------------------
 credit_final_lr_model <- credit_lr_model %>% fit(Status ~ ., credit_data)
-write_rds(credit_final_lr_model, "credit_final_lr_model.rds", compress = "xz")
+
+
+
